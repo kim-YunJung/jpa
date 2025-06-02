@@ -1,0 +1,205 @@
+## Me
+백엔드로는 코클린, jpa를 사용하고 프로트엔드로는 react를 사용한 쇼핑몰을 구성하고 싶어 관리자 모드에서는 상품을 등록과 제고관리 주문관리를 할 수 있고, 고객은 상품을 살수 있으며 쿠폰에 따라 할인 받을 수 있는 쇼핑몰을 구성해줘
+
+## AI Assistant
+쇼핑몰 시스템을 설계하면서 필요한 핵심 구성 요소를 나열하고, 각 기능에 대한 설명 및 간단한 구현 방안을 소개하겠습니다. 이를 통해 React를 프론트엔드, Kotlin/JPA를 백엔드로 사용하는 쇼핑몰을 구성할 수 있습니다. 
+
+### 1. 주요 요구사항 및 시스템 설계
+**1. 고객 기능:**
+- 상품 목록 보기
+- 상품 상세 페이지 보기
+- 상품 장바구니에 추가
+- 주문 및 결제
+- 쿠폰 사용을 통한 할인
+
+**2. 관리자 기능:**
+- 상품 등록/수정/삭제
+- 재고 관리
+- 주문 내역 관리 및 상태 변경(배송 준비 중, 배송 완료 등)
+
+---
+
+### 2. 백엔드 설계 (Kotlin/JPA)
+1. **도메인 모델 설계**  
+Kotlin JPA를 사용하여 데이터베이스와 매핑할 엔티티 클래스(Entity)를 정의합니다.
+
+#### 주요 엔티티
+- `User`: 고객/관리자 정보를 저장
+- `Product`: 상품 정보 관리
+- `Order`: 주문 관리를 위한 모델
+- `Coupon`: 쿠폰 정보 관리
+- `OrderItem`: 주문된 상품 및 수량 정보 저장
+
+#### 기본적인 엔티티 예제
+```kotlin
+import jakarta.persistence.*
+
+@Entity
+data class Product(
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long = 0L,
+    var name: String,
+    var price: Double,
+    var stockQuantity: Int // 재고 수량
+)
+
+@Entity
+data class User(
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long = 0L,
+    var name: String,
+    var email: String,
+    var password: String,
+    @Enumerated(EnumType.STRING)
+    var role: Role
+)
+
+enum class Role {
+    CUSTOMER, ADMIN
+}
+
+@Entity
+data class Order(
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long = 0L,
+    @ManyToOne(fetch = FetchType.LAZY)
+    val user: User,
+
+    @OneToMany(cascade = [CascadeType.ALL], mappedBy = "order")
+    val orderItems: MutableList<OrderItem> = mutableListOf(),
+
+    var status: OrderStatus
+)
+
+enum class OrderStatus { PENDING, SHIPPED, DELIVERED }
+```
+
+#### Repository와 Service
+- `ProductRepository`: 상품 관리
+- `OrderRepository`: 주문 관리
+- `UserRepository`: 사용자 관리
+
+예를 들어, 상품을 검색하는 서비스는 다음과 같이 작성될 수 있습니다.
+```kotlin
+@Service
+@RequiredArgsConstructor
+class ProductService(private val productRepository: ProductRepository) {
+
+    fun findAllProducts(): List<Product> {
+        return productRepository.findAll()
+    }
+
+    fun createProduct(name: String, price: Double, stockQuantity: Int): Product {
+        val product = Product(name = name, price = price, stockQuantity = stockQuantity)
+        return productRepository.save(product)
+    }
+}
+```
+
+---
+
+### 3. 프론트엔드 설계 (React)
+`React`를 사용하여 고객/관리자의 각각의 인터페이스(UI)를 구성합니다. 또한 `React Router`를 활용하여 라우팅을 구현하고, 상태 관리를 위해 `Redux` 또는 `Context API`를 사용할 수 있습니다.
+
+#### 주요 화면 (페이지)
+- **고객 페이지**
+  - Home Page: 상품 목록 표시
+  - 상품 상세 페이지: 개별 상품 가격/설명/재고 정보
+  - 장바구니 페이지: 사용자가 선택한 상품 리스트 및 수량 수정 가능
+  - 결제 페이지: 고객 정보, 배송 정보, 최종 결제 금액
+- **관리자 페이지**
+  - 상품 등록/관리 페이지: 새 상품 등록, 재고 수정, 상품 리스트 제공
+  - 주문 관리 페이지: 주문 목록 확인 및 상태 변경(예: 배송 상태)
+
+#### 페이지 예시
+**상품 목록 조회 페이지**
+```textmate
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+
+const ProductList = () => {
+  const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    axios.get("/api/products") // 백엔드 API 호출
+      .then((response) => setProducts(response.data))
+      .catch((error) => console.error(error));
+  }, []);
+
+  return (
+    <div>
+      <h1>상품 목록</h1>
+      <ul>
+        {products.map(product => (
+          <li key={product.id}>
+            <h2>{product.name}</h2>
+            <p>가격: {product.price}원</p>
+            <p>재고: {product.stockQuantity}개</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default ProductList;
+```
+
+---
+
+### 4. REST API 설계
+백엔드에서 제공하는 주요 REST API 엔드포인트는 다음과 같습니다.
+
+- **상품 API**
+  - `GET /api/products`: 전체 상품 조회
+  - `GET /api/products/{id}`: 개별 상품 조회
+  - `POST /api/products`: 상품 등록 (관리자)
+  - `PUT /api/products/{id}`: 상품 수정 (관리자)
+  - `DELETE /api/products/{id}`: 상품 삭제 (관리자)
+
+- **주문 API**
+  - `GET /api/orders`: 전체 주문 조회 (관리자)
+  - `POST /api/orders`: 새로운 주문 생성 (고객)
+  - `PUT /api/orders/{id}`: 주문 상태 변경 (관리자)
+
+---
+
+### 5. 쿠폰 설계
+- 쿠폰은 할인률(%) 또는 고정 금액 차감 방식으로 설계합니다.
+- 쿠폰 사용 시 주문 금액 계산 방식:
+  - `주문 금액 = 상품 금액 - 쿠폰 할인 금액`
+
+#### 쿠폰 엔티티
+```kotlin
+@Entity
+data class Coupon(
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long = 0L,
+    var name: String,
+    var discountPercentage: Double,
+    var expirationDate: LocalDateTime
+)
+
+@Entity
+data class UserCoupon(
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long = 0L,
+    @ManyToOne
+    val user: User,
+    @ManyToOne
+    val coupon: Coupon,
+    var used: Boolean = false
+)
+```
+
+---
+
+### 6. 기술 스택
+- **백엔드**: Kotlin, Spring Boot, JPA/Hibernate, Gradle
+- **프론트엔드**: React (React Router, Axios), CSS/Tailwind
+- **데이터베이스**: MySQL or PostgreSQL
+- **빌드/배포**: Docker, AWS 또는 Heroku
+
+---
+
+구체적인 코드 예제나 특정 구현 방법에 대해 더 궁금한 점이 있다면 말씀해주세요! 😊

@@ -1,0 +1,219 @@
+## Me
+java, jpa / react를 사용해서 sns기능을 만들고 싶어 사진을 첨부하고 사진과 내용을 목록으로 보여주고 좋아요와 싫어요를 누를 수 있고 댓글과 대댓글을 달 수 있었으면 좋겠어. 사진에 따라서는 비공개글로 작성이 가능하도록 구성해줘
+
+## AI Assistant
+위의 정보를 기반으로 React와 JPA(Spring Boot)를 사용해서 SNS 기능을 만드는 프로젝트 구조를 설계하고, 필요한 주요 구현 내용을 간략히 제공해 드리겠습니다. 요구사항에 따라 사진 첨부, 게시글 목록, 좋아요/싫어요, 댓글, 대댓글, 비공개 기능을 포함합니다.
+
+---
+
+## **프로젝트 구조**
+### 1. **백엔드 (Java + Spring Boot + JPA)**
+
+#### 엔티티 설계
+1. **Post (게시글)**
+   - 사진, 글 내용, 상태(공개/비공개)
+
+2. **User (사용자)**
+   - 작성자를 식별하기 위한 엔티티
+
+3. **Comment (댓글)**
+   - 게시글에 달리는 댓글
+   - 대댓글을 위한 `parent` 필드 포함
+
+4. **Reaction (좋아요/싫어요)**
+   - 특정 사용자의 반응을 저장
+
+---
+
+### **예제 엔티티**
+
+```java
+package com.example.sns.entity;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Getter
+@Setter
+public class Post {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String content;           // 글 내용
+
+    private String photoUrl;          // 사진 경로
+
+    @Enumerated(EnumType.STRING)
+    private PostVisibility visibility; // 공개/비공개 상태
+
+    private LocalDateTime createdAt;  // 작성 시간
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;                // 작성자
+
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Comment> comments = new ArrayList<>(); // 댓글
+
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Reaction> reactions = new ArrayList<>(); // 좋아요/싫어요
+}
+
+enum PostVisibility {
+    PUBLIC,
+    PRIVATE
+}
+```
+
+#### 댓글과 대댓글
+```java
+@Entity
+@Getter
+@Setter
+public class Comment {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String content;  // 댓글 내용
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;       // 작성자
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "post_id")
+    private Post post;       // 대상 게시글
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private Comment parent;  // 부모 댓글 (대댓글인 경우)
+
+    @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Comment> replies = new ArrayList<>(); // 대댓글
+}
+```
+
+#### Reaction 엔티티
+```java
+@Entity
+@Getter
+@Setter
+public class Reaction {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Enumerated(EnumType.STRING)
+    private ReactionType reactionType; // 좋아요 or 싫어요
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    private User user;  // 반응한 사용자
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    private Post post;  // 대상 게시글
+}
+
+public enum ReactionType {
+    LIKE,
+    DISLIKE
+}
+```
+
+---
+
+### 2. **프론트엔드 (React)**
+
+#### React 구조
+1. **라우팅**: React Router를 사용하여 아래와 같이 구성
+   - `/posts`: 게시글 리스트
+   - `/posts/:postId`: 게시글 상세페이지
+   - `/login` 및 `/signup`: 사용자 로그인/회원가입
+
+2. **컴포넌트**
+   - **PostList**: 게시글 목록
+   - **PostDetail**: 게시글 상세
+   - **Comment**: 댓글 및 대댓글 컴포넌트
+   - **PostForm**: 게시글 작성(이미지 업로드 포함)
+   
+#### 예제 코드: 게시글 목록 불러오기
+```textmate
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+
+const PostList = () => {
+  const [posts, setPosts] = useState([]);
+
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const fetchPosts = async () => {
+    try {
+      const response = await axios.get("/api/posts"); // 백엔드 API 호출
+      setPosts(response.data);
+    } catch (error) {
+      console.error("게시글을 불러오는데 실패했습니다.", error);
+    }
+  };
+
+  return (
+    <div>
+      <h1>게시글 목록</h1>
+      <ul>
+        {posts.map((post) => (
+          <li key={post.id}>
+            <img src={post.photoUrl} alt="" style={{ width: "100px" }} />
+            <p>{post.content}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default PostList;
+```
+
+---
+
+### 3. **API 설계**
+
+| **URL**                | **HTTP 메서드** | **기능**                  |
+|-----------------------|----------------|-------------------------|
+| `/api/posts`          | GET            | 게시글 목록 조회             |
+| `/api/posts`          | POST           | 게시글 작성               |
+| `/api/posts/:id`      | GET            | 게시글 상세보기             |
+| `/api/posts/:id/reactions` | POST           | 좋아요/싫어요 등록         |
+| `/api/posts/:id/comments`  | POST           | 댓글 작성 (대댓글 포함)      |
+
+---
+
+### 4. **비공개 게시글 처리**
+백엔드에서 `@PreAuthorize` 또는 사용자 인증(Authorization) 로직을 적용하여 비공개 게시글은 작성자 본인만 볼 수 있도록 처리합니다.
+
+```java
+@RestController
+@RequestMapping("/api/posts")
+@RequiredArgsConstructor
+public class PostController {
+    private final PostRepository postRepository;
+
+    @GetMapping
+    public List<Post> getPosts() {
+        // 공개된 게시글만 반환
+        return postRepository.findByVisibility(PostVisibility.PUBLIC);
+    }
+}
+```
+
+---
+
+구현 시 추가적인 상세사항이나 특정 기능에 대해 질문이 있으면 편하게 말씀해주세요! 😊
