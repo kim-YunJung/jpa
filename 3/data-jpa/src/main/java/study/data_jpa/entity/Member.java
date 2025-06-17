@@ -7,7 +7,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Getter @Setter
+@Getter
 public class Member {
     @Id
     @GeneratedValue
@@ -20,4 +20,7 @@ public class Member {
     public Member(String username) {
         this.username = username;
     }
+
+    public void changeUsername(String username){
+        this.username = username;
 }
